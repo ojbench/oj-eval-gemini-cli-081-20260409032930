@@ -1,102 +1,81 @@
 #pragma GCC optimize("O3,unroll-loops")
 #include <iostream>
 #include <vector>
-#include <algorithm>
+#include <map>
+#include <random>
 
 using namespace std;
 
-struct Edge {
-    int to;
-    int cap;
-    int flow;
-    int rev;
-};
-
 const int MAXN = 3005;
-vector<Edge> adj[MAXN];
-int level[MAXN];
-int ptr[MAXN];
-int visited[MAXN];
-int visit_id = 0;
+vector<pair<int, int>> adj[MAXN]; // to, edge_index
+int u_edge[4505], v_edge[4505];
+uint64_t weight[4505];
+bool is_tree_edge[4505];
+bool visited[MAXN];
+int depth[MAXN];
+uint64_t val[MAXN];
 
-vector<Edge*> modified_edges;
-
-void add_edge(int u, int v, int cap) {
-    adj[u].push_back({v, cap, 0, (int)adj[v].size()});
-    adj[v].push_back({u, cap, 0, (int)adj[u].size() - 1});
+void dfs_tree(int u, int p, int d) {
+    visited[u] = true;
+    depth[u] = d;
+    for (auto& edge : adj[u]) {
+        int v = edge.first;
+        int idx = edge.second;
+        if (v == p) continue;
+        if (!visited[v]) {
+            is_tree_edge[idx] = true;
+            dfs_tree(v, u, d + 1);
+        } else if (depth[v] < depth[u]) {
+            // Back-edge
+            is_tree_edge[idx] = false;
+        }
+    }
 }
 
-int q[MAXN];
+uint64_t dfs_weight(int u, int p) {
+    uint64_t current_val = val[u];
+    for (auto& edge : adj[u]) {
+        int v = edge.first;
+        int idx = edge.second;
+        if (v == p) continue;
+        if (is_tree_edge[idx] && depth[v] > depth[u]) {
+            uint64_t subtree_val = dfs_weight(v, u);
+            weight[idx] = subtree_val;
+            current_val ^= subtree_val;
+        }
+    }
+    return current_val;
+}
 
-bool bfs(int s, int t, int n) {
-    visit_id++;
-    level[s] = 0;
-    visited[s] = visit_id;
-    int head = 0, tail = 0;
-    q[tail++] = s;
-    
-    while (head < tail) {
-        int v = q[head++];
-        for (auto& edge : adj[v]) {
-            if (edge.cap - edge.flow > 0 && visited[edge.to] != visit_id) {
-                visited[edge.to] = visit_id;
-                level[edge.to] = level[v] + 1;
-                q[tail++] = edge.to;
+int comp2[MAXN];
+void dfs_comp2(int u, int c) {
+    comp2[u] = c;
+    for (auto& edge : adj[u]) {
+        int v = edge.first;
+        int idx = edge.second;
+        if (comp2[v] == 0 && weight[idx] != 0) {
+            dfs_comp2(v, c);
+        }
+    }
+}
+
+uint64_t vertex_hash[MAXN];
+map<uint64_t, uint64_t> H;
+
+void dfs_hash(int u, int p, uint64_t current_hash) {
+    vertex_hash[u] = current_hash;
+    for (auto& edge : adj[u]) {
+        int v = edge.first;
+        int idx = edge.second;
+        if (v == p) continue;
+        if (is_tree_edge[idx] && depth[v] > depth[u]) {
+            uint64_t next_hash = current_hash;
+            if (weight[idx] != 0 && H.count(weight[idx])) {
+                next_hash ^= H[weight[idx]];
             }
+            dfs_hash(v, u, next_hash);
         }
     }
-    return visited[t] == visit_id;
-}
-
-int dfs(int v, int t, int pushed) {
-    if (pushed == 0) return 0;
-    if (v == t) return pushed;
-    for (int& cid = ptr[v]; cid < adj[v].size(); ++cid) {
-        auto& edge = adj[v][cid];
-        int tr = edge.to;
-        if (visited[tr] != visit_id || level[v] + 1 != level[tr] || edge.cap - edge.flow == 0) continue;
-        int push = dfs(tr, t, min(pushed, edge.cap - edge.flow));
-        if (push == 0) continue;
-        
-        if (edge.flow == 0) modified_edges.push_back(&edge);
-        edge.flow += push;
-        
-        Edge& rev_edge = adj[tr][edge.rev];
-        if (rev_edge.flow == 0) modified_edges.push_back(&rev_edge);
-        rev_edge.flow -= push;
-        
-        return push;
-    }
-    return 0;
-}
-
-int max_flow(int s, int t, int n) {
-    for (Edge* edge : modified_edges) {
-        edge->flow = 0;
-    }
-    modified_edges.clear();
-    
-    int flow = 0;
-    while (bfs(s, t, n)) {
-        for (int i = 1; i <= n; ++i) {
-            if (visited[i] == visit_id) {
-                ptr[i] = 0;
-            }
-        }
-        while (int pushed = dfs(s, t, 1e9)) {
-            flow += pushed;
-        }
-    }
-    return flow;
-}
-
-int parent_node[MAXN];
-int dsu_size[MAXN];
-
-int find_set(int v) {
-    if (v == parent_node[v])
-        return v;
-    return parent_node[v] = find_set(parent_node[v]);
 }
 
 int main() {
@@ -106,53 +85,110 @@ int main() {
     int n, m;
     if (!(cin >> n >> m)) return 0;
 
-    for (int i = 0; i < m; ++i) {
-        int u, v;
-        cin >> u >> v;
-        add_edge(u, v, 1);
+    for (int i = 1; i <= m; ++i) {
+        cin >> u_edge[i] >> v_edge[i];
+        adj[u_edge[i]].push_back({v_edge[i], i});
+        adj[v_edge[i]].push_back({u_edge[i], i});
     }
 
-    vector<int> p(n + 1, 1);
-    vector<int> weight(n + 1, 0);
-
-    for (int i = 2; i <= n; ++i) {
-        int s = i, t = p[i];
-        int f = max_flow(s, t, n);
-        weight[i] = f;
-        
-        for (int j = i + 1; j <= n; ++j) {
-            if (p[j] == t && visited[j] == visit_id) {
-                p[j] = i;
-            }
-        }
-    }
-
-    vector<pair<int, pair<int, int>>> tree_edges;
-    for (int i = 2; i <= n; ++i) {
-        tree_edges.push_back({weight[i], {i, p[i]}});
-    }
-
-    sort(tree_edges.rbegin(), tree_edges.rend());
-
-    for (int i = 1; i <= n; ++i) {
-        parent_node[i] = i;
-        dsu_size[i] = 1;
-    }
+    mt19937_64 rng(1337);
 
     long long total_sum = 0;
-    for (auto& edge : tree_edges) {
-        int w = edge.first;
-        int u = edge.second.first;
-        int v = edge.second.second;
-        
-        int root_u = find_set(u);
-        int root_v = find_set(v);
-        
-        if (root_u != root_v) {
-            total_sum += 1LL * dsu_size[root_u] * dsu_size[root_v] * w;
-            parent_node[root_u] = root_v;
-            dsu_size[root_v] += dsu_size[root_u];
+
+    // 1. Connected components
+    for (int i = 1; i <= n; ++i) {
+        if (!visited[i]) {
+            dfs_tree(i, 0, 1);
         }
+    }
+
+    vector<int> parent(n + 1);
+    vector<int> sz(n + 1, 1);
+    for (int i = 1; i <= n; ++i) parent[i] = i;
+    auto find_set = [&](auto& self, int v) -> int {
+        if (v == parent[v]) return v;
+        return parent[v] = self(self, parent[v]);
+    };
+    auto union_sets = [&](int a, int b) {
+        a = find_set(find_set, a);
+        b = find_set(find_set, b);
+        if (a != b) {
+            parent[b] = a;
+            sz[a] += sz[b];
+        }
+    };
+
+    for (int i = 1; i <= m; ++i) {
+        union_sets(u_edge[i], v_edge[i]);
+    }
+
+    for (int i = 1; i <= n; ++i) {
+        if (parent[i] == i) {
+            total_sum += 1LL * sz[i] * (sz[i] - 1) / 2;
+        }
+    }
+
+    // Assign random weights to back-edges
+    for (int i = 1; i <= m; ++i) {
+        if (!is_tree_edge[i]) {
+            weight[i] = rng();
+            val[u_edge[i]] ^= weight[i];
+            val[v_edge[i]] ^= weight[i];
+        }
+    }
+
+    // Compute tree edge weights
+    for (int i = 1; i <= n; ++i) {
+        if (depth[i] == 1) {
+            dfs_weight(i, 0);
+        }
+    }
+
+    // 2. 2-Edge-Connected Components
+    int c2 = 0;
+    for (int i = 1; i <= n; ++i) {
+        if (comp2[i] == 0) {
+            c2++;
+            dfs_comp2(i, c2);
+        }
+    }
+
+    vector<int> sz2(c2 + 1, 0);
+    for (int i = 1; i <= n; ++i) {
+        sz2[comp2[i]]++;
+    }
+    for (int i = 1; i <= c2; ++i) {
+        total_sum += 1LL * sz2[i] * (sz2[i] - 1) / 2;
+    }
+
+    // 3. 3-Edge-Connected Components
+    map<uint64_t, int> freq;
+    for (int i = 1; i <= m; ++i) {
+        if (weight[i] != 0) {
+            freq[weight[i]]++;
+        }
+    }
+
+    for (auto& p : freq) {
+        if (p.second >= 2) {
+            H[p.first] = rng();
+        }
+    }
+
+    for (int i = 1; i <= n; ++i) {
+        if (depth[i] == 1) {
+            dfs_hash(i, 0, 0);
+        }
+    }
+
+    map<pair<int, uint64_t>, int> comp3_sz;
+    for (int i = 1; i <= n; ++i) {
+        comp3_sz[{comp2[i], vertex_hash[i]}]++;
+    }
+
+    for (auto& p : comp3_sz) {
+        long long S = p.second;
+        total_sum += S * (S - 1) / 2;
     }
 
     cout << total_sum << "\n";
