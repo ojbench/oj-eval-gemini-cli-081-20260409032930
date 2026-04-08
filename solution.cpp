@@ -14,6 +14,8 @@ struct Edge {
 
 const int MAXN = 3005;
 vector<Edge> adj[MAXN];
+int level[MAXN];
+int ptr[MAXN];
 int visited[MAXN];
 int visit_id = 0;
 
@@ -24,39 +26,66 @@ void add_edge(int u, int v, int cap) {
     adj[v].push_back({u, cap, 0, (int)adj[u].size() - 1});
 }
 
-int dfs(int u, int t, int f) {
-    if (u == t) return f;
-    visited[u] = visit_id;
-    for (auto& edge : adj[u]) {
-        if (visited[edge.to] != visit_id && edge.cap - edge.flow > 0) {
-            int pushed = dfs(edge.to, t, min(f, edge.cap - edge.flow));
-            if (pushed > 0) {
-                if (edge.flow == 0) modified_edges.push_back(&edge);
-                edge.flow += pushed;
-                
-                Edge& rev_edge = adj[edge.to][edge.rev];
-                if (rev_edge.flow == 0) modified_edges.push_back(&rev_edge);
-                rev_edge.flow -= pushed;
-                
-                return pushed;
+int q[MAXN];
+
+bool bfs(int s, int t, int n) {
+    visit_id++;
+    level[s] = 0;
+    visited[s] = visit_id;
+    int head = 0, tail = 0;
+    q[tail++] = s;
+    
+    while (head < tail) {
+        int v = q[head++];
+        for (auto& edge : adj[v]) {
+            if (edge.cap - edge.flow > 0 && visited[edge.to] != visit_id) {
+                visited[edge.to] = visit_id;
+                level[edge.to] = level[v] + 1;
+                q[tail++] = edge.to;
             }
         }
+    }
+    return visited[t] == visit_id;
+}
+
+int dfs(int v, int t, int pushed) {
+    if (pushed == 0) return 0;
+    if (v == t) return pushed;
+    for (int& cid = ptr[v]; cid < adj[v].size(); ++cid) {
+        auto& edge = adj[v][cid];
+        int tr = edge.to;
+        if (visited[tr] != visit_id || level[v] + 1 != level[tr] || edge.cap - edge.flow == 0) continue;
+        int push = dfs(tr, t, min(pushed, edge.cap - edge.flow));
+        if (push == 0) continue;
+        
+        if (edge.flow == 0) modified_edges.push_back(&edge);
+        edge.flow += push;
+        
+        Edge& rev_edge = adj[tr][edge.rev];
+        if (rev_edge.flow == 0) modified_edges.push_back(&rev_edge);
+        rev_edge.flow -= push;
+        
+        return push;
     }
     return 0;
 }
 
-int max_flow(int s, int t) {
+int max_flow(int s, int t, int n) {
     for (Edge* edge : modified_edges) {
         edge->flow = 0;
     }
     modified_edges.clear();
     
     int flow = 0;
-    while (true) {
-        visit_id++;
-        int pushed = dfs(s, t, 1e9);
-        if (pushed == 0) break;
-        flow += pushed;
+    while (bfs(s, t, n)) {
+        for (int i = 1; i <= n; ++i) {
+            if (visited[i] == visit_id) {
+                ptr[i] = 0;
+            }
+        }
+        while (int pushed = dfs(s, t, 1e9)) {
+            flow += pushed;
+        }
     }
     return flow;
 }
@@ -88,8 +117,9 @@ int main() {
 
     for (int i = 2; i <= n; ++i) {
         int s = i, t = p[i];
-        int f = max_flow(s, t);
+        int f = max_flow(s, t, n);
         weight[i] = f;
+        
         for (int j = i + 1; j <= n; ++j) {
             if (p[j] == t && visited[j] == visit_id) {
                 p[j] = i;
