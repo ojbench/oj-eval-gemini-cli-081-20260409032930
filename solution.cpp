@@ -1,3 +1,4 @@
+#pragma GCC optimize("O3,unroll-loops")
 #include <iostream>
 #include <vector>
 #include <algorithm>
@@ -16,6 +17,8 @@ vector<Edge> adj[MAXN];
 int visited[MAXN];
 int visit_id = 0;
 
+vector<Edge*> modified_edges;
+
 void add_edge(int u, int v, int cap) {
     adj[u].push_back({v, cap, 0, (int)adj[v].size()});
     adj[v].push_back({u, cap, 0, (int)adj[u].size() - 1});
@@ -28,8 +31,13 @@ int dfs(int u, int t, int f) {
         if (visited[edge.to] != visit_id && edge.cap - edge.flow > 0) {
             int pushed = dfs(edge.to, t, min(f, edge.cap - edge.flow));
             if (pushed > 0) {
+                if (edge.flow == 0) modified_edges.push_back(&edge);
                 edge.flow += pushed;
-                adj[edge.to][edge.rev].flow -= pushed;
+                
+                Edge& rev_edge = adj[edge.to][edge.rev];
+                if (rev_edge.flow == 0) modified_edges.push_back(&rev_edge);
+                rev_edge.flow -= pushed;
+                
                 return pushed;
             }
         }
@@ -37,12 +45,12 @@ int dfs(int u, int t, int f) {
     return 0;
 }
 
-int max_flow(int s, int t, int n) {
-    for (int i = 1; i <= n; ++i) {
-        for (auto& edge : adj[i]) {
-            edge.flow = 0;
-        }
+int max_flow(int s, int t) {
+    for (Edge* edge : modified_edges) {
+        edge->flow = 0;
     }
+    modified_edges.clear();
+    
     int flow = 0;
     while (true) {
         visit_id++;
@@ -80,7 +88,7 @@ int main() {
 
     for (int i = 2; i <= n; ++i) {
         int s = i, t = p[i];
-        int f = max_flow(s, t, n);
+        int f = max_flow(s, t);
         weight[i] = f;
         for (int j = i + 1; j <= n; ++j) {
             if (p[j] == t && visited[j] == visit_id) {
