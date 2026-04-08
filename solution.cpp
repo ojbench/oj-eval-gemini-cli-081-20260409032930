@@ -1,7 +1,6 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
-#include <cstring>
 
 using namespace std;
 
@@ -14,7 +13,8 @@ struct Edge {
 
 const int MAXN = 3005;
 vector<Edge> adj[MAXN];
-bool visited[MAXN];
+int visited[MAXN];
+int visit_id = 0;
 
 void add_edge(int u, int v, int cap) {
     adj[u].push_back({v, cap, 0, (int)adj[v].size()});
@@ -23,9 +23,9 @@ void add_edge(int u, int v, int cap) {
 
 int dfs(int u, int t, int f) {
     if (u == t) return f;
-    visited[u] = true;
+    visited[u] = visit_id;
     for (auto& edge : adj[u]) {
-        if (!visited[edge.to] && edge.cap - edge.flow > 0) {
+        if (visited[edge.to] != visit_id && edge.cap - edge.flow > 0) {
             int pushed = dfs(edge.to, t, min(f, edge.cap - edge.flow));
             if (pushed > 0) {
                 edge.flow += pushed;
@@ -45,7 +45,7 @@ int max_flow(int s, int t, int n) {
     }
     int flow = 0;
     while (true) {
-        memset(visited, 0, sizeof(bool) * (n + 1));
+        visit_id++;
         int pushed = dfs(s, t, 1e9);
         if (pushed == 0) break;
         flow += pushed;
@@ -83,7 +83,7 @@ int main() {
         int f = max_flow(s, t, n);
         weight[i] = f;
         for (int j = i + 1; j <= n; ++j) {
-            if (p[j] == t && visited[j]) {
+            if (p[j] == t && visited[j] == visit_id) {
                 p[j] = i;
             }
         }
