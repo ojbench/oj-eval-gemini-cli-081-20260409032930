@@ -60,7 +60,7 @@ void dfs_comp2(int u, int c) {
 }
 
 uint64_t vertex_hash[MAXN];
-map<uint64_t, uint64_t> H;
+uint64_t edge_hash[4505];
 
 void dfs_hash(int u, int p, uint64_t current_hash) {
     vertex_hash[u] = current_hash;
@@ -69,10 +69,7 @@ void dfs_hash(int u, int p, uint64_t current_hash) {
         int idx = edge.second;
         if (v == p) continue;
         if (is_tree_edge[idx] && depth[v] > depth[u]) {
-            uint64_t next_hash = current_hash;
-            if (weight[idx] != 0 && H.count(weight[idx])) {
-                next_hash ^= H[weight[idx]];
-            }
+            uint64_t next_hash = current_hash ^ edge_hash[idx];
             dfs_hash(v, u, next_hash);
         }
     }
@@ -162,16 +159,40 @@ int main() {
     }
 
     // 3. 3-Edge-Connected Components
-    map<uint64_t, int> freq;
+    map<uint64_t, vector<int>> tree_edges_with_weight;
+    map<uint64_t, int> back_edges_with_weight;
+    
     for (int i = 1; i <= m; ++i) {
         if (weight[i] != 0) {
-            freq[weight[i]]++;
+            if (is_tree_edge[i]) {
+                tree_edges_with_weight[weight[i]].push_back(i);
+            } else {
+                back_edges_with_weight[weight[i]]++;
+            }
         }
     }
 
-    for (auto& p : freq) {
-        if (p.second >= 2) {
-            H[p.first] = rng();
+    for (auto& p : tree_edges_with_weight) {
+        uint64_t w = p.first;
+        auto& edges = p.second;
+        int m_count = edges.size();
+        int back_count = back_edges_with_weight[w];
+        int k = m_count + back_count;
+        
+        if (k >= 2) {
+            if (back_count > 0) {
+                for (int idx : edges) {
+                    edge_hash[idx] = rng();
+                }
+            } else {
+                uint64_t xor_sum = 0;
+                for (int i = 0; i < m_count - 1; ++i) {
+                    uint64_t h = rng();
+                    edge_hash[edges[i]] = h;
+                    xor_sum ^= h;
+                }
+                edge_hash[edges.back()] = xor_sum;
+            }
         }
     }
 
